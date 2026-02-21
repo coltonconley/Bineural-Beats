@@ -62,3 +62,32 @@ export interface EngineState {
   isochronicEnabled: boolean
   breathingGuideEnabled: boolean
 }
+
+// ── Session History & User Data ──────────────────────────
+
+export type MoodRating = 'energized' | 'calm' | 'focused' | 'sleepy'
+
+export interface CompletedSession {
+  id: string
+  presetId: string
+  presetName: string
+  category: PresetCategory
+  durationSeconds: number
+  completedAt: string
+  mood?: MoodRating
+  completedFull: boolean
+}
+
+export interface UserStats {
+  totalSessions: number
+  totalMinutes: number
+  currentStreak: number
+  longestStreak: number
+  lastSessionDate: string | null
+}
+
+export interface UserPreferences {
+  favorites: string[]
+  hapticEnabled: boolean
+  reducedMotion: boolean
+}

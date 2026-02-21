@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { AudioEngineState } from '../hooks/useAudioEngine'
-import { bandInfo, phaseLabels, getMainPhaseLabel } from '../presets'
+import type { UserStats, MoodRating } from '../types'
+import { phaseLabels, getMainPhaseLabel } from '../presets'
 import { Visualizer } from './Visualizer'
 import { BreathingGuide } from './BreathingGuide'
+import { CompletionScreen } from './CompletionScreen'
 
 interface Props {
   state: AudioEngineState
@@ -13,6 +15,9 @@ interface Props {
   onToggleIsochronic: () => void
   onToggleBreathingGuide: () => void
   onComplete: () => void
+  onMoodSelect: (mood: MoodRating) => void
+  stats: UserStats
+  hapticEnabled: boolean
   getAnalyser: () => AnalyserNode | null
 }
 
@@ -39,6 +44,9 @@ export function Player({
   onToggleIsochronic,
   onToggleBreathingGuide,
   onComplete,
+  onMoodSelect,
+  stats,
+  hapticEnabled,
   getAnalyser,
 }: Props) {
   const preset = state.activePreset!
@@ -106,39 +114,15 @@ export function Player({
 
   const orbSize = typeof window !== 'undefined' ? Math.min(window.innerWidth * 0.6, 300) : 300
 
-  // Minimum beat frequency for completion display
-  const minBeatFreq = preset.frequencyEnvelope.length > 0
-    ? preset.frequencyEnvelope.reduce((min, p) => Math.min(min, p.beatFreq), Infinity)
-    : 0
-
   if (showCompletion) {
     return (
-      <div
-        className="fixed inset-0 flex flex-col items-center justify-center px-8"
-        style={{ background: 'var(--color-bg-deep)' }}
-      >
-        {/* Ambient glow */}
-        <div
-          className="absolute w-64 h-64 rounded-full blur-3xl opacity-20"
-          style={{ background: preset.color }}
-        />
-
-        <div className="relative animate-fade-in-up text-center">
-          <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Session Complete</p>
-          <h2 className="text-2xl font-light text-slate-100 mb-1">{preset.name}</h2>
-          <p className="text-sm text-slate-400 mb-8">
-            {formatTime(state.duration)} · {bandInfo[preset.targetBand].label}{' '}
-            {minBeatFreq.toFixed(0)} Hz
-          </p>
-
-          <button
-            onClick={onStop}
-            className="px-8 py-3 rounded-2xl text-sm font-medium glass text-slate-200 hover:text-white transition-colors"
-          >
-            Done
-          </button>
-        </div>
-      </div>
+      <CompletionScreen
+        preset={preset}
+        duration={state.duration}
+        stats={stats}
+        onMoodSelect={onMoodSelect}
+        onDone={onStop}
+      />
     )
   }
 
@@ -213,7 +197,7 @@ export function Player({
 
         {/* Breathing guide */}
         {state.breathingGuideEnabled && (
-          <BreathingGuide size={orbSize} />
+          <BreathingGuide size={orbSize} hapticEnabled={hapticEnabled} />
         )}
 
         {/* Center text */}
@@ -398,8 +382,8 @@ export function Player({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fade-in"
           onClick={() => setShowStopConfirm(false)}
         >
-          <div className="glass rounded-3xl p-6 max-w-xs text-center animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm text-slate-200 mb-4">End session early?</p>
+          <div className="glass rounded-3xl p-6 max-w-xs text-center animate-fade-in-up" role="alertdialog" aria-describedby="stop-confirm-msg" onClick={(e) => e.stopPropagation()}>
+            <p id="stop-confirm-msg" className="text-sm text-slate-200 mb-4">End session early?</p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowStopConfirm(false)}

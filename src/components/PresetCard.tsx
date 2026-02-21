@@ -4,6 +4,8 @@ import { bandInfo } from '../presets'
 interface Props {
   preset: SessionPreset
   onSelect: (preset: SessionPreset) => void
+  isFavorite?: boolean
+  onToggleFavorite?: (presetId: string) => void
 }
 
 function formatDuration(seconds: number): string {
@@ -11,8 +13,11 @@ function formatDuration(seconds: number): string {
   return `${mins} min`
 }
 
-export function PresetCard({ preset, onSelect }: Props) {
+export function PresetCard({ preset, onSelect, isFavorite, onToggleFavorite }: Props) {
   const band = bandInfo[preset.targetBand]
+  const minFreq = preset.frequencyEnvelope.length > 0
+    ? preset.frequencyEnvelope.reduce((min, p) => Math.min(min, p.beatFreq), Infinity)
+    : 0
 
   return (
     <button
@@ -32,6 +37,23 @@ export function PresetCard({ preset, onSelect }: Props) {
       <div className="relative">
         <div className="flex items-start justify-between mb-3">
           <span className="text-2xl">{preset.icon}</span>
+          {onToggleFavorite && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleFavorite(preset.id)
+              }}
+              className="w-8 h-8 flex items-center justify-center rounded-full transition-colors hover:bg-white/10"
+              aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                <path
+                  d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+                  className={isFavorite ? 'text-white/80' : 'text-white/20'}
+                />
+              </svg>
+            </button>
+          )}
         </div>
 
         <h3 className="text-base font-medium text-slate-100 mb-1.5">{preset.name}</h3>
@@ -47,7 +69,7 @@ export function PresetCard({ preset, onSelect }: Props) {
             className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium"
             style={{ background: `${preset.color}20`, color: preset.color }}
           >
-            {band.label} {preset.frequencyEnvelope.reduce((min, p) => Math.min(min, p.beatFreq), Infinity).toFixed(0)} Hz
+            {band.label} {minFreq.toFixed(0)} Hz
           </span>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { SessionPreset, SessionOptions } from '../types'
 import { bandInfo } from '../presets'
 import { FrequencySparkline } from './FrequencySparkline'
@@ -28,8 +28,17 @@ export function SessionSetup({ preset, onClose, onBegin }: Props) {
     })
   }
 
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label={`${preset.name} session setup`}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 animate-fade-in"

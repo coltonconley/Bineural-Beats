@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { SessionPreset, SessionOptions } from './types'
+import type { SessionPreset, SessionOptions, MoodRating } from './types'
 import { useAudioEngine } from './hooks/useAudioEngine'
 import { useWakeLock } from './hooks/useWakeLock'
+import { useSessionHistory } from './hooks/useSessionHistory'
 import { Onboarding } from './components/Onboarding'
 import { PresetList } from './components/PresetList'
 import { SessionSetup } from './components/SessionSetup'
@@ -23,7 +24,9 @@ function App() {
 
   const audio = useAudioEngine()
   const wakeLock = useWakeLock()
+  const history = useSessionHistory()
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval>>(null)
+  const [lastCompletedSessionId, setLastCompletedSessionId] = useState<string | null>(null)
 
   // Clean up countdown interval on unmount
   useEffect(() => {
@@ -90,7 +93,27 @@ function App() {
 
   const handleSessionComplete = useCallback(() => {
     wakeLock.release()
-  }, [wakeLock])
+    if (audio.state.activePreset) {
+      const session = history.addSession({
+        presetId: audio.state.activePreset.id,
+        presetName: audio.state.activePreset.name,
+        category: audio.state.activePreset.category,
+        durationSeconds: Math.round(audio.state.elapsed),
+        completedAt: new Date().toISOString(),
+        completedFull: true,
+      })
+      setLastCompletedSessionId(session.id)
+    }
+  }, [wakeLock, audio.state, history])
+
+  const handleMoodSelect = useCallback(
+    (mood: MoodRating) => {
+      if (lastCompletedSessionId) {
+        history.updateSessionMood(lastCompletedSessionId, mood)
+      }
+    },
+    [lastCompletedSessionId, history],
+  )
 
   const handleOnboardingComplete = useCallback(() => {
     try {
@@ -124,6 +147,9 @@ function App() {
         onToggleIsochronic={audio.toggleIsochronic}
         onToggleBreathingGuide={audio.toggleBreathingGuide}
         onComplete={handleSessionComplete}
+        onMoodSelect={handleMoodSelect}
+        stats={history.stats}
+        hapticEnabled={history.preferences.hapticEnabled}
         getAnalyser={audio.getAnalyser}
       />
     )
@@ -131,7 +157,12 @@ function App() {
 
   return (
     <div className="min-h-dvh" style={{ background: 'var(--color-bg-deep)' }}>
-      <PresetList onSelect={handlePresetSelect} />
+      <PresetList
+        onSelect={handlePresetSelect}
+        stats={history.stats}
+        favorites={history.preferences.favorites}
+        onToggleFavorite={history.toggleFavorite}
+      />
 
       {view === 'setup' && selectedPreset && (
         <SessionSetup
