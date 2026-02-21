@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import type { SessionPreset, SessionOptions } from './types'
 import { useAudioEngine } from './hooks/useAudioEngine'
 import { useWakeLock } from './hooks/useWakeLock'
@@ -23,6 +23,16 @@ function App() {
 
   const audio = useAudioEngine()
   const wakeLock = useWakeLock()
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval>>(null)
+
+  // Clean up countdown interval on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current)
+      }
+    }
+  }, [])
 
   const handlePresetSelect = useCallback((preset: SessionPreset) => {
     setSelectedPreset(preset)
@@ -46,11 +56,13 @@ function App() {
           count--
           if (count <= 0) {
             clearInterval(interval)
+            countdownIntervalRef.current = null
             resolve()
           } else {
             setCountdownNum(count)
           }
         }, 900)
+        countdownIntervalRef.current = interval
       })
 
       try {

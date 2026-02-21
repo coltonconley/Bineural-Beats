@@ -149,6 +149,13 @@ export class SessionManager {
     this.startTickLoop()
   }
 
+  /** Fade all audio to silence over the given duration */
+  fadeOut(durationSec: number): void {
+    this.engine.fadeVolume(0, durationSec)
+    this.noise.fadeVolume(0, durationSec)
+    if (this._isochronicEnabled) this.isochronic.setVolume(0)
+  }
+
   stop(): void {
     this.stopTickLoop()
     document.removeEventListener('visibilitychange', this.handleVisibilityChange)

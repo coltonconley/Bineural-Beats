@@ -90,7 +90,12 @@ export function useAudioEngine() {
   }, [getManager])
 
   const stop = useCallback(() => {
-    getManager().stop()
+    const manager = getManager()
+    // Fade out audio briefly before full stop to avoid abrupt cutoff
+    manager.fadeOut(0.3)
+    setTimeout(() => {
+      manager.stop()
+    }, 350)
     setState({ ...initialState, volume: volumeRef.current })
   }, [getManager])
 

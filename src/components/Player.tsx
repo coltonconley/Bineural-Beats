@@ -36,6 +36,8 @@ export function Player({
   onResume,
   onStop,
   onVolumeChange,
+  onToggleIsochronic,
+  onToggleBreathingGuide,
   onComplete,
   getAnalyser,
 }: Props) {
@@ -44,19 +46,22 @@ export function Player({
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
   const [showStopConfirm, setShowStopConfirm] = useState(false)
   const [showCompletion, setShowCompletion] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const dimTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
   // Use refs for values read inside the setTimeout to avoid stale closures
   const showVolumeSliderRef = useRef(showVolumeSlider)
   const showStopConfirmRef = useRef(showStopConfirm)
+  const showSettingsRef = useRef(showSettings)
   showVolumeSliderRef.current = showVolumeSlider
   showStopConfirmRef.current = showStopConfirm
+  showSettingsRef.current = showSettings
 
   const resetDimTimer = useCallback(() => {
     setControlsVisible(true)
     if (dimTimerRef.current) clearTimeout(dimTimerRef.current)
     dimTimerRef.current = setTimeout(() => {
       // Read from refs to avoid stale closure
-      if (!showVolumeSliderRef.current && !showStopConfirmRef.current) {
+      if (!showVolumeSliderRef.current && !showStopConfirmRef.current && !showSettingsRef.current) {
         setControlsVisible(false)
       }
     }, 10000)
@@ -83,6 +88,13 @@ export function Player({
     resetDimTimer()
   }, [resetDimTimer])
 
+  // Close popups when clicking the main background
+  const handleBackgroundClick = useCallback(() => {
+    if (showVolumeSlider) setShowVolumeSlider(false)
+    if (showSettings) setShowSettings(false)
+    handleInteraction()
+  }, [showVolumeSlider, showSettings, handleInteraction])
+
   // Progress
   const progress = state.duration > 0 ? state.elapsed / state.duration : 0
   const circumference = 2 * Math.PI * 140
@@ -93,6 +105,11 @@ export function Player({
     state.phase === 'main' ? getMainPhaseLabel(preset, state.beatFreq) : phaseLabels[state.phase]
 
   const orbSize = typeof window !== 'undefined' ? Math.min(window.innerWidth * 0.6, 300) : 300
+
+  // Minimum beat frequency for completion display
+  const minBeatFreq = preset.frequencyEnvelope.length > 0
+    ? preset.frequencyEnvelope.reduce((min, p) => Math.min(min, p.beatFreq), Infinity)
+    : 0
 
   if (showCompletion) {
     return (
@@ -111,10 +128,7 @@ export function Player({
           <h2 className="text-2xl font-light text-slate-100 mb-1">{preset.name}</h2>
           <p className="text-sm text-slate-400 mb-8">
             {formatTime(state.duration)} · {bandInfo[preset.targetBand].label}{' '}
-            {preset.frequencyEnvelope
-              .reduce((min, p) => Math.min(min, p.beatFreq), Infinity)
-              .toFixed(0)}{' '}
-            Hz
+            {minBeatFreq.toFixed(0)} Hz
           </p>
 
           <button
@@ -132,7 +146,7 @@ export function Player({
     <div
       className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden"
       style={{ background: 'var(--color-bg-deep)' }}
-      onClick={handleInteraction}
+      onClick={handleBackgroundClick}
       onMouseMove={handleInteraction}
       onTouchStart={handleInteraction}
     >
@@ -231,13 +245,13 @@ export function Player({
 
       {/* Controls */}
       <div
-        className="fixed bottom-0 left-0 right-0 flex items-center justify-center gap-6 pb-8 safe-bottom transition-opacity duration-500"
+        className="fixed bottom-0 left-0 right-0 flex items-center justify-center gap-4 pb-8 safe-bottom transition-opacity duration-500"
         style={{ opacity: controlsVisible ? 1 : 0.15 }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Stop */}
         <button
-          onClick={(e) => {
-            e.stopPropagation()
+          onClick={() => {
             setShowStopConfirm(true)
           }}
           className="w-10 h-10 rounded-full glass flex items-center justify-center text-slate-400 hover:text-white transition-colors"
@@ -248,10 +262,71 @@ export function Player({
           </svg>
         </button>
 
+        {/* Settings (isochronic + breathing) */}
+        <div className="relative">
+          <button
+            onClick={() => {
+              setShowSettings(!showSettings)
+              setShowVolumeSlider(false)
+              resetDimTimer()
+            }}
+            className="w-10 h-10 rounded-full glass flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+            aria-label="Settings"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <circle cx="8" cy="8" r="3" />
+              <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
+            </svg>
+          </button>
+
+          {/* Settings popup */}
+          {showSettings && (
+            <div
+              className="absolute bottom-14 left-1/2 -translate-x-1/2 glass rounded-2xl p-4 animate-fade-in min-w-[200px]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Breathing guide toggle */}
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <span className="text-xs text-slate-300">Breathing guide</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={state.breathingGuideEnabled}
+                  aria-label="Breathing guide"
+                  onClick={() => onToggleBreathingGuide()}
+                  className={`w-9 h-5 rounded-full p-0.5 transition-colors cursor-pointer ${state.breathingGuideEnabled ? 'bg-purple-500' : 'bg-white/10'}`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full bg-white transition-transform ${state.breathingGuideEnabled ? 'translate-x-4' : 'translate-x-0'}`}
+                  />
+                </button>
+              </div>
+
+              {/* Isochronic toggle (only if available) */}
+              {preset.isochronicAvailable && (
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-slate-300">Isochronic tones</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={state.isochronicEnabled}
+                    aria-label="Isochronic tones"
+                    onClick={() => onToggleIsochronic()}
+                    className={`w-9 h-5 rounded-full p-0.5 transition-colors cursor-pointer ${state.isochronicEnabled ? 'bg-purple-500' : 'bg-white/10'}`}
+                  >
+                    <div
+                      className={`w-4 h-4 rounded-full bg-white transition-transform ${state.isochronicEnabled ? 'translate-x-4' : 'translate-x-0'}`}
+                    />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Play/Pause */}
         <button
-          onClick={(e) => {
-            e.stopPropagation()
+          onClick={() => {
             if (state.isPaused) {
               onResume()
             } else {
@@ -281,9 +356,9 @@ export function Player({
         {/* Volume */}
         <div className="relative">
           <button
-            onClick={(e) => {
-              e.stopPropagation()
+            onClick={() => {
               setShowVolumeSlider(!showVolumeSlider)
+              setShowSettings(false)
               resetDimTimer()
             }}
             className="w-10 h-10 rounded-full glass flex items-center justify-center text-slate-400 hover:text-white transition-colors"
@@ -319,7 +394,10 @@ export function Player({
 
       {/* Stop confirmation */}
       {showStopConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fade-in">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-fade-in"
+          onClick={() => setShowStopConfirm(false)}
+        >
           <div className="glass rounded-3xl p-6 max-w-xs text-center animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
             <p className="text-sm text-slate-200 mb-4">End session early?</p>
             <div className="flex gap-3">

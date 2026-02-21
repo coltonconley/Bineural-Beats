@@ -43,8 +43,10 @@ export function Visualizer({ getAnalyser, color, isPlaying }: Props) {
       const dataArray = new Uint8Array(bufferLength)
       analyser.getByteTimeDomainData(dataArray)
 
-      const w = canvas.width
-      const h = canvas.height
+      // Use CSS pixel dimensions (context is already scaled by devicePixelRatio)
+      const dpr = window.devicePixelRatio || 1
+      const w = canvas.width / dpr
+      const h = canvas.height / dpr
       const centerY = h / 2
 
       ctx.clearRect(0, 0, w, h)
