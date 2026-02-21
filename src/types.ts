@@ -62,3 +62,58 @@ export interface EngineState {
   isochronicEnabled: boolean
   breathingGuideEnabled: boolean
 }
+
+// ── Session History & User Data ──────────────────────────
+
+export type MoodRating = 'energized' | 'calm' | 'focused' | 'sleepy'
+
+export interface CompletedSession {
+  id: string
+  presetId: string
+  presetName: string
+  category: PresetCategory
+  durationSeconds: number
+  completedAt: string
+  mood?: MoodRating
+  completedFull: boolean
+}
+
+export interface UserStats {
+  totalSessions: number
+  totalMinutes: number
+  currentStreak: number
+  longestStreak: number
+  lastSessionDate: string | null
+}
+
+export interface UserPreferences {
+  favorites: string[]
+  hapticEnabled: boolean
+  reducedMotion: boolean
+}
+
+// ── Journeys / Programs ──────────────────────────────────
+
+export interface JourneyDay {
+  day: number
+  presetId: string
+  title: string
+  tip: string
+}
+
+export interface Journey {
+  id: string
+  name: string
+  description: string
+  category: PresetCategory
+  days: JourneyDay[]
+  icon: string
+  color: string
+}
+
+export interface JourneyProgress {
+  journeyId: string
+  completedDays: number[]
+  startedAt: string
+  lastCompletedAt: string | null
+}

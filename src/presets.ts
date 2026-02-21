@@ -276,6 +276,33 @@ export const phaseLabels: Record<string, string> = {
   complete: 'Complete',
 }
 
+/** Returns recommended preset IDs based on time of day */
+export function getRecommendedPresets(): string[] {
+  const hour = new Date().getHours()
+  if (hour >= 5 && hour < 12) {
+    // Morning: focus
+    return ['focus-session', 'gamma-boost', 'quick-calm']
+  } else if (hour >= 12 && hour < 18) {
+    // Afternoon: focus + relaxation
+    return ['focus-session', 'quick-calm', 'creative-theta']
+  } else if (hour >= 18 && hour < 22) {
+    // Evening: relaxation + meditation
+    return ['deep-relax', 'theta-meditation', 'creative-theta']
+  } else {
+    // Night: sleep
+    return ['sleep-drift', 'power-nap', 'deep-relax']
+  }
+}
+
+/** Returns a greeting based on time of day */
+export function getTimeGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour >= 5 && hour < 12) return 'Good morning'
+  if (hour >= 12 && hour < 18) return 'Good afternoon'
+  if (hour >= 18 && hour < 22) return 'Good evening'
+  return 'Good evening'
+}
+
 /** Returns a more descriptive label for the main phase based on target vs current */
 export function getMainPhaseLabel(preset: SessionPreset, beatFreq: number): string {
   const target = preset.frequencyEnvelope.reduce(

@@ -19,6 +19,10 @@ export function Visualizer({ getAnalyser, color, isPlaying }: Props) {
   useEffect(() => {
     if (!isPlaying) return
 
+    // Skip continuous animation if user prefers reduced motion
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (prefersReducedMotion) return
+
     const draw = () => {
       const canvas = canvasRef.current
       if (!canvas) {
