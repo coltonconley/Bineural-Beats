@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { SessionPreset, SessionOptions, AmbientSoundType } from '../types'
 import { bandInfo } from '../presets'
 import { FrequencySparkline } from './FrequencySparkline'
 import { usePreviewTone } from '../hooks/usePreviewTone'
 import { ambientSounds } from '../audio/ambientSounds'
-import { scoreVoice } from '../audio/VoiceCueEngine'
 
 function formatPhaseTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
@@ -36,44 +35,47 @@ export function SessionSetup({ preset, onClose, onBegin }: Props) {
   // Voice settings for guided sessions
   const isGuided = !!preset.guidanceScript
   const [voiceEnabled, setVoiceEnabled] = useState(true)
-  const [voiceRate, setVoiceRate] = useState(85) // stored as 50-150, displayed as 0.5-1.5
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
-  const [selectedVoiceName, setSelectedVoiceName] = useState('')
+  const [isPreviewingVoice, setIsPreviewingVoice] = useState(false)
+  const voicePreviewCtxRef = useRef<AudioContext | null>(null)
 
-  // Load available voices, sorted by quality (best first)
-  useEffect(() => {
-    if (!isGuided || typeof speechSynthesis === 'undefined') return
+  const handlePreviewVoice = useCallback(async () => {
+    if (isPreviewingVoice) return
+    setIsPreviewingVoice(true)
+    try {
+      const base = import.meta.env.BASE_URL
+      const manifestRes = await fetch(`${base}voice/manifest.json`)
+      if (!manifestRes.ok) throw new Error('No manifest')
+      const manifest = await manifestRes.json()
+      const files: string[] = manifest[preset.id]
+      if (!files || files.length === 0) throw new Error('No voice files')
 
-    const loadVoices = () => {
-      const available = speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'))
-      available.sort((a, b) => scoreVoice(b) - scoreVoice(a))
-      setVoices(available)
-      if (available.length > 0 && !selectedVoiceName) {
-        setSelectedVoiceName(available[0].name)
+      const audioRes = await fetch(`${base}voice/${preset.id}/${files[0]}`)
+      if (!audioRes.ok) throw new Error('Fetch failed')
+      const arrayBuf = await audioRes.arrayBuffer()
+
+      const ctx = new AudioContext()
+      voicePreviewCtxRef.current = ctx
+      const buffer = await ctx.decodeAudioData(arrayBuf)
+      const source = ctx.createBufferSource()
+      source.buffer = buffer
+      source.connect(ctx.destination)
+      source.onended = () => {
+        setIsPreviewingVoice(false)
+        ctx.close()
+        voicePreviewCtxRef.current = null
       }
+      source.start()
+    } catch {
+      setIsPreviewingVoice(false)
     }
-
-    loadVoices()
-    speechSynthesis.addEventListener('voiceschanged', loadVoices)
-    return () => speechSynthesis.removeEventListener('voiceschanged', loadVoices)
-  }, [isGuided, selectedVoiceName])
-
-  const handleTestVoice = useCallback(() => {
-    if (typeof speechSynthesis === 'undefined') return
-    speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance('Mind awake, body asleep.')
-    const voice = voices.find(v => v.name === selectedVoiceName)
-    if (voice) utterance.voice = voice
-    utterance.rate = voiceRate / 100
-    utterance.pitch = 0.92
-    utterance.volume = 0.7
-    speechSynthesis.speak(utterance)
-  }, [voices, selectedVoiceName, voiceRate])
+  }, [isPreviewingVoice, preset.id])
 
   const handleBegin = () => {
     preview.stop()
-    if (typeof speechSynthesis !== 'undefined') {
-      speechSynthesis.cancel()
+    // Clean up voice preview if active
+    if (voicePreviewCtxRef.current) {
+      voicePreviewCtxRef.current.close()
+      voicePreviewCtxRef.current = null
     }
     onBegin(preset, {
       isochronicEnabled,
@@ -82,8 +84,6 @@ export function SessionSetup({ preset, onClose, onBegin }: Props) {
       ambientSound,
       ambientVolume: ambientVolume / 100,
       voiceEnabled: isGuided ? voiceEnabled : undefined,
-      preferredVoiceName: isGuided ? selectedVoiceName : undefined,
-      voiceRate: isGuided ? voiceRate / 100 : undefined,
     })
   }
 
@@ -292,7 +292,10 @@ export function SessionSetup({ preset, onClose, onBegin }: Props) {
               <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-3">Voice Guidance</p>
 
               <div className="flex items-center justify-between gap-3 mb-3">
-                <span className="text-xs text-slate-300">Voice narration</span>
+                <div>
+                  <span className="text-xs text-slate-300">Voice narration</span>
+                  <p className="text-[10px] text-slate-500">Neural voice (pre-recorded)</p>
+                </div>
                 <button
                   type="button"
                   role="switch"
@@ -305,53 +308,14 @@ export function SessionSetup({ preset, onClose, onBegin }: Props) {
                 </button>
               </div>
 
-              {voiceEnabled && voices.length > 0 && (
-                <>
-                  <div className="mb-3">
-                    <label className="text-[10px] text-slate-500 block mb-1">Voice</label>
-                    <select
-                      value={selectedVoiceName}
-                      onChange={(e) => setSelectedVoiceName(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-300 outline-none focus:border-white/20"
-                    >
-                      {voices.map((v) => (
-                        <option key={v.name} value={v.name}>
-                          {scoreVoice(v) >= 80 ? '★ ' : ''}{v.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="mb-3">
-                    <div className="flex justify-between text-[10px] text-slate-500 mb-1">
-                      <span>Speech rate</span>
-                      <span>{(voiceRate / 100).toFixed(2)}x</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={50}
-                      max={150}
-                      value={voiceRate}
-                      onChange={(e) => setVoiceRate(Number(e.target.value))}
-                      className="w-full"
-                    />
-                  </div>
-
-                  <button
-                    onClick={handleTestVoice}
-                    className="w-full py-2 rounded-xl text-xs font-medium text-slate-400 border border-white/10 hover:border-white/20 transition-colors"
-                  >
-                    Test Voice
-                  </button>
-                </>
-              )}
-
-              {voiceEnabled && voices.length === 0 && typeof speechSynthesis !== 'undefined' && (
-                <p className="text-[10px] text-slate-500">Loading voices...</p>
-              )}
-
-              {typeof speechSynthesis === 'undefined' && (
-                <p className="text-[10px] text-amber-500/70">Voice synthesis not available in this browser. Chimes will still play.</p>
+              {voiceEnabled && (
+                <button
+                  onClick={handlePreviewVoice}
+                  disabled={isPreviewingVoice}
+                  className="w-full py-2 rounded-xl text-xs font-medium text-slate-400 border border-white/10 hover:border-white/20 transition-colors disabled:opacity-50"
+                >
+                  {isPreviewingVoice ? 'Playing...' : 'Preview Voice'}
+                </button>
               )}
             </div>
           )}

@@ -56,8 +56,6 @@ export function useAudioEngine() {
         ambientSound?: AmbientSoundType
         ambientVolume?: number
         voiceEnabled?: boolean
-        preferredVoiceName?: string
-        voiceRate?: number
       },
     ) => {
       const manager = getManager()
@@ -88,8 +86,6 @@ export function useAudioEngine() {
         ambVol,
         {
           voiceEnabled: options?.voiceEnabled,
-          preferredVoiceName: options?.preferredVoiceName,
-          voiceRate: options?.voiceRate,
         },
       )
 

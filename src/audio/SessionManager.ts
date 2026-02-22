@@ -87,8 +87,6 @@ export class SessionManager {
     ambientVolume?: number,
     sessionOptions?: {
       voiceEnabled?: boolean
-      preferredVoiceName?: string
-      voiceRate?: number
     },
   ): Promise<void> {
     if (this._starting) return
@@ -171,9 +169,7 @@ export class SessionManager {
 
         // Initialize voice cue engine
         const voiceEnabled = sessionOptions?.voiceEnabled !== false
-        this.voiceCues.init(this.guidanceScript.voiceCues, {
-          preferredVoiceName: sessionOptions?.preferredVoiceName,
-          rate: sessionOptions?.voiceRate,
+        this.voiceCues.init(this.ctx, this.ctx.destination, preset.id, this.guidanceScript.voiceCues, {
           volume: this.guidanceScript.voiceVolume ?? 0.71,
           enabled: voiceEnabled,
         })

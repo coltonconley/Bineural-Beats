@@ -149,8 +149,6 @@ export interface SessionOptions {
   ambientSound?: AmbientSoundType
   ambientVolume?: number
   voiceEnabled?: boolean
-  preferredVoiceName?: string
-  voiceRate?: number
 }
 
 export interface EngineState {

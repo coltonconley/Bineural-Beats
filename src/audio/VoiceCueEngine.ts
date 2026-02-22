@@ -1,81 +1,59 @@
 import type { VoiceCue } from '../types'
 
-// Keywords that indicate premium neural/cloud-based voices
-const PREMIUM_KEYWORDS = ['google', 'neural', 'online', 'premium', 'enhanced', 'natural']
-
-// Well-known soothing system voices on macOS/iOS (decent quality)
-const SOOTHING_VOICES = ['samantha', 'karen', 'daniel', 'moira', 'fiona', 'alex', 'victoria']
-
-/** Score a voice by estimated quality — higher is better. Exported for UI voice pickers. */
-export function scoreVoice(voice: SpeechSynthesisVoice): number {
-  const name = voice.name.toLowerCase()
-
-  // Premium cloud/neural voices (Google, Microsoft Neural, Apple Enhanced) — best quality
-  for (const kw of PREMIUM_KEYWORDS) {
-    if (name.includes(kw)) return 100
-  }
-
-  // Remote/cloud voices (localService === false) tend to be higher quality
-  if (!voice.localService) return 80
-
-  // Well-known macOS soothing voices
-  for (const s of SOOTHING_VOICES) {
-    if (name.includes(s)) return 70
-  }
-
-  return 50
+interface VoiceManifest {
+  [trackId: string]: string[]
 }
 
 export class VoiceCueEngine {
   private cues: VoiceCue[] = []
   private nextCueIndex = 0
-  private voice: SpeechSynthesisVoice | null = null
-  private rate = 0.85
-  private pitch = 0.92
-  private volume = 0.71
   private enabled = true
-  private voicesLoaded = false
-  private onVoicesChanged: (() => void) | null = null
-  private preferredVoiceName: string | null = null
+  private volume = 0.71
+  private trackId = ''
 
-  get isAvailable(): boolean {
-    return typeof speechSynthesis !== 'undefined'
-  }
+  // Web Audio graph
+  private ctx: AudioContext | null = null
+  private gainNode: GainNode | null = null
+  private activeSource: AudioBufferSourceNode | null = null
+
+  // Audio buffer cache (index -> AudioBuffer)
+  private bufferCache = new Map<number, AudioBuffer>()
+  private fetchPromises = new Map<number, Promise<AudioBuffer | null>>()
+  private manifest: string[] = []
+  private manifestLoaded = false
+
+  // Fallback flag
+  private useFallback = false
 
   init(
+    ctx: AudioContext,
+    destination: AudioNode,
+    trackId: string,
     cues: VoiceCue[],
     options?: {
-      preferredVoiceName?: string
-      rate?: number
-      pitch?: number
       volume?: number
       enabled?: boolean
     },
   ): void {
+    this.ctx = ctx
+    this.trackId = trackId
     this.cues = [...cues].sort((a, b) => a.time - b.time)
     this.nextCueIndex = 0
-    this.rate = options?.rate ?? 0.85
-    this.pitch = options?.pitch ?? 0.92
     this.volume = options?.volume ?? 0.71
     this.enabled = options?.enabled ?? true
-    this.preferredVoiceName = options?.preferredVoiceName ?? null
+    this.bufferCache = new Map()
+    this.fetchPromises = new Map()
+    this.manifest = []
+    this.manifestLoaded = false
+    this.useFallback = false
 
-    if (!this.isAvailable) return
+    // Create gain node for volume control
+    this.gainNode = ctx.createGain()
+    this.gainNode.gain.value = this.volume
+    this.gainNode.connect(destination)
 
-    // Try to select voice immediately
-    this.selectVoice()
-
-    // Warm up the TTS engine with a silent utterance (avoids quality drop on first real cue)
-    this.warmUp()
-
-    // Handle async voice loading
-    if (!this.voicesLoaded) {
-      this.onVoicesChanged = () => {
-        this.selectVoice()
-        this.voicesLoaded = true
-      }
-      speechSynthesis.addEventListener('voiceschanged', this.onVoicesChanged)
-    }
+    // Load manifest and start prefetching
+    this.loadManifest()
   }
 
   tick(elapsed: number): { shouldChime: boolean; cueText?: string } {
@@ -88,6 +66,7 @@ export class VoiceCueEngine {
 
     while (this.nextCueIndex < this.cues.length && this.cues[this.nextCueIndex].time <= elapsed) {
       const cue = this.cues[this.nextCueIndex]
+      const cueIndex = this.nextCueIndex
       this.nextCueIndex++
 
       if (cue.chime || cue.chimeOnly) {
@@ -97,9 +76,14 @@ export class VoiceCueEngine {
       if (!cue.chimeOnly && cue.text) {
         cueText = cue.text
         if (this.enabled) {
-          this.speak(cue.text)
+          this.playAudio(cueIndex)
         }
       }
+    }
+
+    // Prefetch upcoming cues
+    if (this.enabled && this.manifestLoaded) {
+      this.prefetchAhead(this.nextCueIndex, 3)
     }
 
     return { shouldChime, cueText }
@@ -118,26 +102,15 @@ export class VoiceCueEngine {
   }
 
   pause(): void {
-    if (!this.isAvailable) return
-    try {
-      speechSynthesis.pause()
-    } catch { /* */ }
+    this.stopActiveSource()
   }
 
   resume(): void {
-    if (!this.isAvailable) return
-    try {
-      speechSynthesis.resume()
-    } catch { /* */ }
+    // Audio cues are short; we don't resume mid-cue
   }
 
   seek(time: number): void {
-    // Cancel any in-progress speech
-    if (this.isAvailable) {
-      try {
-        speechSynthesis.cancel()
-      } catch { /* */ }
-    }
+    this.stopActiveSource()
 
     // Binary search for the next cue at or after `time`
     let lo = 0
@@ -151,82 +124,169 @@ export class VoiceCueEngine {
       }
     }
     this.nextCueIndex = lo
+
+    // Prefetch around new position
+    if (this.manifestLoaded) {
+      this.prefetchAhead(lo, 3)
+    }
   }
 
   stop(): void {
-    if (this.isAvailable) {
-      try {
-        speechSynthesis.cancel()
-      } catch { /* */ }
-    }
+    this.stopActiveSource()
 
-    if (this.onVoicesChanged) {
+    if (this.gainNode) {
       try {
-        speechSynthesis.removeEventListener('voiceschanged', this.onVoicesChanged)
-      } catch { /* */ }
-      this.onVoicesChanged = null
+        this.gainNode.disconnect()
+      } catch { /* already disconnected */ }
+      this.gainNode = null
     }
 
     this.cues = []
     this.nextCueIndex = 0
-    this.voice = null
-    this.voicesLoaded = false
+    this.bufferCache = new Map()
+    this.fetchPromises = new Map()
+    this.manifest = []
+    this.manifestLoaded = false
+    this.ctx = null
   }
 
-  private speak(text: string): void {
-    if (!this.isAvailable || !this.enabled) return
+  // ── Private helpers ─────────────────────────────────
 
-    const utterance = new SpeechSynthesisUtterance(text)
-    if (this.voice) utterance.voice = this.voice
-    utterance.rate = this.rate
-    utterance.pitch = this.pitch
-    utterance.volume = this.volume
-    utterance.lang = 'en-US'
-
-    utterance.onend = () => { /* speech finished */ }
-    utterance.onerror = () => { /* speech error */ }
-
+  private async loadManifest(): Promise<void> {
     try {
-      speechSynthesis.speak(utterance)
-    } catch { /* */ }
-  }
-
-  private warmUp(): void {
-    if (!this.isAvailable || !this.enabled) return
-    try {
-      const u = new SpeechSynthesisUtterance('')
-      u.volume = 0
-      speechSynthesis.speak(u)
-    } catch { /* */ }
-  }
-
-  private selectVoice(): void {
-    if (!this.isAvailable) return
-
-    try {
-      const voices = speechSynthesis.getVoices()
-      if (voices.length === 0) return
-
-      // If user specified a preferred voice, try to find it
-      if (this.preferredVoiceName) {
-        const preferred = voices.find(v =>
-          v.name.toLowerCase().includes(this.preferredVoiceName!.toLowerCase())
-        )
-        if (preferred) {
-          this.voice = preferred
-          return
-        }
+      const base = import.meta.env.BASE_URL
+      const res = await fetch(`${base}voice/manifest.json`)
+      if (!res.ok) {
+        console.warn('Voice manifest not found, falling back to Web Speech API')
+        this.useFallback = true
+        return
       }
+      const data: VoiceManifest = await res.json()
+      this.manifest = data[this.trackId] ?? []
+      this.manifestLoaded = true
 
-      // Score and rank all English voices by quality, pick the best
-      const englishVoices = voices.filter(v => v.lang.startsWith('en'))
-      if (englishVoices.length === 0) {
-        this.voice = voices[0]
+      if (this.manifest.length === 0) {
+        console.warn(`No voice files for track "${this.trackId}", falling back to Web Speech API`)
+        this.useFallback = true
         return
       }
 
-      englishVoices.sort((a, b) => scoreVoice(b) - scoreVoice(a))
-      this.voice = englishVoices[0]
-    } catch { /* */ }
+      // Eagerly prefetch first 5 spoken cues
+      this.prefetchAhead(0, 5)
+    } catch {
+      console.warn('Failed to load voice manifest, falling back to Web Speech API')
+      this.useFallback = true
+    }
+  }
+
+  /** Maps a cue index to the corresponding spoken-cue index (skipping chimeOnly cues) */
+  private getSpokenIndex(cueIndex: number): number {
+    let spokenIdx = 0
+    for (let i = 0; i < cueIndex && i < this.cues.length; i++) {
+      if (!this.cues[i].chimeOnly) {
+        spokenIdx++
+      }
+    }
+    return spokenIdx
+  }
+
+  private prefetchAhead(fromCueIndex: number, count: number): void {
+    let prefetched = 0
+    for (let i = fromCueIndex; i < this.cues.length && prefetched < count; i++) {
+      if (!this.cues[i].chimeOnly && this.cues[i].text) {
+        this.fetchBuffer(i)
+        prefetched++
+      }
+    }
+  }
+
+  private async fetchBuffer(cueIndex: number): Promise<AudioBuffer | null> {
+    if (this.bufferCache.has(cueIndex)) {
+      return this.bufferCache.get(cueIndex)!
+    }
+
+    if (this.fetchPromises.has(cueIndex)) {
+      return this.fetchPromises.get(cueIndex)!
+    }
+
+    const spokenIndex = this.getSpokenIndex(cueIndex)
+    if (spokenIndex >= this.manifest.length) return null
+
+    const filename = this.manifest[spokenIndex]
+    const base = import.meta.env.BASE_URL
+    const url = `${base}voice/${this.trackId}/${filename}`
+
+    const promise = (async (): Promise<AudioBuffer | null> => {
+      try {
+        const res = await fetch(url)
+        if (!res.ok) return null
+        const arrayBuf = await res.arrayBuffer()
+        if (!this.ctx) return null
+        const audioBuffer = await this.ctx.decodeAudioData(arrayBuf)
+        this.bufferCache.set(cueIndex, audioBuffer)
+        return audioBuffer
+      } catch {
+        return null
+      } finally {
+        this.fetchPromises.delete(cueIndex)
+      }
+    })()
+
+    this.fetchPromises.set(cueIndex, promise)
+    return promise
+  }
+
+  private async playAudio(cueIndex: number): Promise<void> {
+    if (!this.ctx || !this.gainNode) return
+
+    // Stop any currently playing source
+    this.stopActiveSource()
+
+    if (this.useFallback || !this.manifestLoaded) {
+      this.speakFallback(this.cues[cueIndex]?.text)
+      return
+    }
+
+    const buffer = await this.fetchBuffer(cueIndex)
+    if (!buffer) {
+      // Fetch failed — try Web Speech API fallback for this cue
+      this.speakFallback(this.cues[cueIndex]?.text)
+      return
+    }
+
+    if (!this.ctx || !this.gainNode) return
+
+    const source = this.ctx.createBufferSource()
+    source.buffer = buffer
+    source.connect(this.gainNode)
+    source.onended = () => {
+      if (this.activeSource === source) {
+        this.activeSource = null
+      }
+    }
+    this.activeSource = source
+    source.start()
+  }
+
+  private stopActiveSource(): void {
+    if (this.activeSource) {
+      try {
+        this.activeSource.stop()
+      } catch { /* already stopped */ }
+      this.activeSource = null
+    }
+  }
+
+  /** Fallback: use Web Speech API if pre-generated audio is unavailable */
+  private speakFallback(text?: string): void {
+    if (!text || typeof speechSynthesis === 'undefined') return
+    try {
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.rate = 0.85
+      utterance.pitch = 0.92
+      utterance.volume = this.volume
+      utterance.lang = 'en-US'
+      speechSynthesis.speak(utterance)
+    } catch { /* silent fail */ }
   }
 }

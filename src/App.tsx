@@ -94,8 +94,6 @@ function App() {
           ambientSound: options.ambientSound,
           ambientVolume: options.ambientVolume,
           voiceEnabled: options.voiceEnabled,
-          preferredVoiceName: options.preferredVoiceName,
-          voiceRate: options.voiceRate,
         })
         await wakeLock.request()
         setView('session')

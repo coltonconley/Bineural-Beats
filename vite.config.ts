@@ -10,7 +10,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'ambient/*.wav'],
+      includeAssets: ['favicon.svg', 'ambient/*.wav', 'voice/**/*.mp3'],
       manifest: {
         name: 'Binaural Beats - Meditation & Focus',
         short_name: 'Binaural Beats',
