@@ -32,9 +32,14 @@ function App() {
   const history = useSessionHistory()
   const custom = useCustomPresets()
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval>>(null)
+  // Stable refs for values read inside callbacks to avoid unstable deps
+  const audioStateRef = useRef(audio.state)
+  audioStateRef.current = audio.state
+  const activeJourneyDayRef = useRef<{ journeyId: string; day: number } | null>(null)
   const [lastCompletedSessionId, setLastCompletedSessionId] = useState<string | null>(null)
   const [selectedJourney, setSelectedJourney] = useState<Journey | null>(null)
   const [activeJourneyDay, setActiveJourneyDay] = useState<{ journeyId: string; day: number } | null>(null)
+  activeJourneyDayRef.current = activeJourneyDay
   const [completionPreset, setCompletionPreset] = useState<SessionPreset | null>(null)
   const [earlyExitDuration, setEarlyExitDuration] = useState(0)
   const [completedFull, setCompletedFull] = useState(true)
@@ -96,7 +101,7 @@ function App() {
         setView('discover')
       }
     },
-    [audio, wakeLock],
+    [audio.startSession, wakeLock],
   )
 
   const handleDismissSession = useCallback(() => {
@@ -105,13 +110,13 @@ function App() {
     setSelectedPreset(null)
     setCompletionPreset(null)
     setView('discover')
-  }, [audio, wakeLock])
+  }, [audio.stop, wakeLock])
 
   const handleEarlyStop = useCallback(() => {
-    const preset = audio.state.activePreset
+    const preset = audioStateRef.current.activePreset
     if (!preset) return
 
-    const elapsed = audio.state.elapsed
+    const elapsed = audioStateRef.current.elapsed
     setCompletionPreset(preset)
     setEarlyExitDuration(elapsed)
     setCompletedFull(false)
@@ -130,7 +135,7 @@ function App() {
 
     audio.stop()
     setView('discover')
-  }, [audio, wakeLock, history])
+  }, [audio.stop, wakeLock, history])
 
   // MediaSession API for lock screen controls + silent audio keepalive
   useMediaSession({
@@ -147,28 +152,30 @@ function App() {
 
   const handleSessionComplete = useCallback(() => {
     wakeLock.release()
-    if (audio.state.activePreset) {
-      setCompletionPreset(audio.state.activePreset)
-      setEarlyExitDuration(audio.state.duration)
+    const st = audioStateRef.current
+    if (st.activePreset) {
+      setCompletionPreset(st.activePreset)
+      setEarlyExitDuration(st.duration)
       setCompletedFull(true)
 
       const session = history.addSession({
-        presetId: audio.state.activePreset.id,
-        presetName: audio.state.activePreset.name,
-        category: audio.state.activePreset.category,
-        durationSeconds: Math.round(audio.state.elapsed),
+        presetId: st.activePreset.id,
+        presetName: st.activePreset.name,
+        category: st.activePreset.category,
+        durationSeconds: Math.round(st.elapsed),
         completedAt: new Date().toISOString(),
         completedFull: true,
       })
       setLastCompletedSessionId(session.id)
 
       // Mark journey day as complete if this was a journey session
-      if (activeJourneyDay) {
-        history.completeJourneyDay(activeJourneyDay.journeyId, activeJourneyDay.day)
+      const journeyDay = activeJourneyDayRef.current
+      if (journeyDay) {
+        history.completeJourneyDay(journeyDay.journeyId, journeyDay.day)
         setActiveJourneyDay(null)
       }
     }
-  }, [wakeLock, audio.state, history, activeJourneyDay])
+  }, [wakeLock, history])
 
   const handleMoodSelect = useCallback(
     (mood: MoodRating) => {

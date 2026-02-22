@@ -92,7 +92,17 @@ export function useMediaSession({
     }
   }, [])
 
-  // MediaSession metadata + handlers
+  // Stable refs for callbacks to avoid re-registering handlers every frame
+  const onPauseRef = useRef(onPause)
+  const onResumeRef = useRef(onResume)
+  const onStopRef = useRef(onStop)
+  const onSeekRef = useRef(onSeek)
+  onPauseRef.current = onPause
+  onResumeRef.current = onResume
+  onStopRef.current = onStop
+  onSeekRef.current = onSeek
+
+  // MediaSession metadata + handlers (only re-runs on play state changes)
   useEffect(() => {
     if (!('mediaSession' in navigator) || !preset) return
 
@@ -105,23 +115,12 @@ export function useMediaSession({
 
       navigator.mediaSession.playbackState = isPaused ? 'paused' : 'playing'
 
-      navigator.mediaSession.setActionHandler('play', () => onResume())
-      navigator.mediaSession.setActionHandler('pause', () => onPause())
-      navigator.mediaSession.setActionHandler('stop', () => onStop())
-      navigator.mediaSession.setActionHandler('seekto', onSeek ? (details) => {
-        if (details.seekTime != null) onSeek(details.seekTime)
-      } : null)
-
-      // Position state for progress on lock screen
-      try {
-        navigator.mediaSession.setPositionState({
-          duration: duration,
-          playbackRate: 1,
-          position: Math.min(elapsed, duration),
-        })
-      } catch {
-        // setPositionState not supported in all browsers
-      }
+      navigator.mediaSession.setActionHandler('play', () => onResumeRef.current())
+      navigator.mediaSession.setActionHandler('pause', () => onPauseRef.current())
+      navigator.mediaSession.setActionHandler('stop', () => onStopRef.current())
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime != null) onSeekRef.current?.(details.seekTime)
+      })
     }
 
     return () => {
@@ -134,7 +133,21 @@ export function useMediaSession({
         navigator.mediaSession.setActionHandler('seekto', null)
       }
     }
-  }, [preset, isPlaying, isPaused, elapsed, duration, onPause, onResume, onStop, onSeek])
+  }, [preset, isPlaying, isPaused])
+
+  // Position state update (runs frequently but is cheap — no teardown/setup)
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || !preset || (!isPlaying && !isPaused)) return
+    try {
+      navigator.mediaSession.setPositionState({
+        duration,
+        playbackRate: 1,
+        position: Math.min(elapsed, duration),
+      })
+    } catch {
+      // setPositionState not supported in all browsers
+    }
+  }, [preset, isPlaying, isPaused, elapsed, duration])
 
   // Start/stop keepalive with session
   useEffect(() => {
