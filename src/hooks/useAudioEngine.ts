@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { SessionManager } from '../audio/SessionManager'
-import type { SessionPreset, SessionPhase } from '../types'
+import type { SessionPreset, SessionPhase, AmbientSoundType } from '../types'
 
 export interface AudioEngineState {
   isPlaying: boolean
@@ -13,6 +13,8 @@ export interface AudioEngineState {
   activePreset: SessionPreset | null
   isochronicEnabled: boolean
   breathingGuideEnabled: boolean
+  ambientSound: AmbientSoundType
+  ambientVolume: number
 }
 
 const initialState: AudioEngineState = {
@@ -26,6 +28,8 @@ const initialState: AudioEngineState = {
   activePreset: null,
   isochronicEnabled: false,
   breathingGuideEnabled: false,
+  ambientSound: 'none',
+  ambientVolume: 0,
 }
 
 export function useAudioEngine() {
@@ -44,25 +48,40 @@ export function useAudioEngine() {
   const startSession = useCallback(
     async (
       preset: SessionPreset,
-      options?: { isochronicEnabled?: boolean; breathingGuideEnabled?: boolean; volume?: number },
+      options?: {
+        isochronicEnabled?: boolean
+        breathingGuideEnabled?: boolean
+        volume?: number
+        ambientSound?: AmbientSoundType
+        ambientVolume?: number
+      },
     ) => {
       const manager = getManager()
       const isoEnabled = options?.isochronicEnabled ?? false
       const breathEnabled = options?.breathingGuideEnabled ?? false
+      const ambSound = options?.ambientSound ?? preset.ambientSound
+      const ambVol = options?.ambientVolume ?? preset.ambientVolume
       if (options?.volume !== undefined) {
         volumeRef.current = options.volume
       }
 
-      await manager.start(preset, volumeRef.current, isoEnabled, ({ phase, elapsed, beatFreq }) => {
-        setState((prev) => ({
-          ...prev,
-          isPlaying: phase !== 'complete',
-          isPaused: false,
-          phase,
-          elapsed,
-          beatFreq,
-        }))
-      })
+      await manager.start(
+        preset,
+        volumeRef.current,
+        isoEnabled,
+        ({ phase, elapsed, beatFreq }) => {
+          setState((prev) => ({
+            ...prev,
+            isPlaying: phase !== 'complete',
+            isPaused: false,
+            phase,
+            elapsed,
+            beatFreq,
+          }))
+        },
+        ambSound,
+        ambVol,
+      )
 
       setState((prev) => ({
         ...prev,
@@ -75,6 +94,8 @@ export function useAudioEngine() {
         activePreset: preset,
         isochronicEnabled: isoEnabled && preset.isochronicAvailable,
         breathingGuideEnabled: breathEnabled,
+        ambientSound: ambSound,
+        ambientVolume: ambVol,
       }))
     },
     [getManager],
@@ -102,7 +123,7 @@ export function useAudioEngine() {
       fadeTimerRef.current = null
       manager.stop()
     }, 350)
-    setState({ ...initialState, volume: volumeRef.current })
+    setState({ ...initialState, volume: volumeRef.current, ambientSound: 'none', ambientVolume: 0 })
   }, [getManager])
 
   const setVolume = useCallback(
@@ -122,6 +143,22 @@ export function useAudioEngine() {
   const toggleBreathingGuide = useCallback(() => {
     setState((prev) => ({ ...prev, breathingGuideEnabled: !prev.breathingGuideEnabled }))
   }, [])
+
+  const setAmbientVolume = useCallback(
+    (v: number) => {
+      getManager().setAmbientVolume(v)
+      setState((prev) => ({ ...prev, ambientVolume: v }))
+    },
+    [getManager],
+  )
+
+  const setAmbientSound = useCallback(
+    async (sound: AmbientSoundType) => {
+      await getManager().setAmbientSound(sound)
+      setState((prev) => ({ ...prev, ambientSound: sound }))
+    },
+    [getManager],
+  )
 
   const getAnalyser = useCallback((): AnalyserNode | null => {
     return getManager().binauralEngine.analyserNode
@@ -145,6 +182,8 @@ export function useAudioEngine() {
     setVolume,
     toggleIsochronic,
     toggleBreathingGuide,
+    setAmbientVolume,
+    setAmbientSound,
     getAnalyser,
   }
 }

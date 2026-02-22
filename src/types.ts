@@ -2,6 +2,8 @@ export type BrainwaveBand = 'delta' | 'theta' | 'alpha' | 'beta' | 'gamma'
 
 export type NoiseType = 'pink' | 'brown' | 'none'
 
+export type AmbientSoundType = 'rain' | 'ocean' | 'forest' | 'fire' | 'wind' | 'stream' | 'none'
+
 export type SessionPhase = 'idle' | 'induction' | 'main' | 'return' | 'complete'
 
 export type PresetCategory = 'meditation' | 'focus' | 'sleep' | 'relaxation' | 'advanced'
@@ -42,12 +44,18 @@ export interface SessionPreset {
   icon: string
   /** Accent color (hex) */
   color: string
+  /** Default ambient sound overlay */
+  ambientSound: AmbientSoundType
+  /** Default ambient volume (0-1) */
+  ambientVolume: number
 }
 
 export interface SessionOptions {
   isochronicEnabled?: boolean
   breathingGuideEnabled?: boolean
   volume?: number
+  ambientSound?: AmbientSoundType
+  ambientVolume?: number
 }
 
 export interface EngineState {

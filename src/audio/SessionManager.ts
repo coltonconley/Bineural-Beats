@@ -1,7 +1,8 @@
-import type { SessionPreset, SessionPhase, FrequencyPoint } from '../types'
+import type { SessionPreset, SessionPhase, FrequencyPoint, AmbientSoundType } from '../types'
 import { BinauralEngine } from './BinauralEngine'
 import { NoiseGenerator } from './NoiseGenerator'
 import { IsochronicEngine } from './IsochronicEngine'
+import { AmbientEngine } from './AmbientEngine'
 
 export type SessionCallback = (state: {
   phase: SessionPhase
@@ -14,6 +15,7 @@ export class SessionManager {
   private engine = new BinauralEngine()
   private noise = new NoiseGenerator()
   private isochronic = new IsochronicEngine()
+  private ambient = new AmbientEngine()
   private preset: SessionPreset | null = null
   private startTime = 0
   private pausedAt = 0
@@ -26,6 +28,8 @@ export class SessionManager {
   private volume = 0.7
   private _isochronicEnabled = false
   private _starting = false
+  private ambientVolume = 0
+  private ambientSound: AmbientSoundType = 'none'
 
   get phase(): SessionPhase {
     return this._phase
@@ -60,6 +64,8 @@ export class SessionManager {
     volume: number,
     isochronicEnabled: boolean,
     onUpdate: SessionCallback,
+    ambientSound?: AmbientSoundType,
+    ambientVolume?: number,
   ): Promise<void> {
     if (this._starting) return
     this._starting = true
@@ -72,6 +78,8 @@ export class SessionManager {
       this.pauseOffset = 0
       this.pausedAt = 0
       this._isochronicEnabled = isochronicEnabled && preset.isochronicAvailable
+      this.ambientSound = ambientSound ?? preset.ambientSound
+      this.ambientVolume = ambientVolume ?? preset.ambientVolume
 
       const initialBeatFreq = preset.frequencyEnvelope[0].beatFreq
 
@@ -108,6 +116,12 @@ export class SessionManager {
         )
       }
 
+      // Start ambient sound (independent of master volume)
+      if (this.ambientSound !== 'none') {
+        await this.ambient.start(this.ctx, this.ctx.destination, this.ambientSound, 0)
+        this.ambient.fadeVolume(this.ambientVolume, 2)
+      }
+
       this._phase = 'induction'
       this.startTime = performance.now()
 
@@ -126,6 +140,7 @@ export class SessionManager {
     this.stopTickLoop()
     this.engine.fadeVolume(0, 0.3)
     this.noise.fadeVolume(0, 0.3)
+    this.ambient.fadeVolume(0, 0.3)
     if (this._isochronicEnabled) this.isochronic.setVolume(0)
   }
 
@@ -145,6 +160,7 @@ export class SessionManager {
     if (this.preset) {
       this.noise.fadeVolume(this.preset.noiseVolume * this.volume, 0.3)
     }
+    this.ambient.fadeVolume(this.ambientVolume, 0.3)
     if (this._isochronicEnabled) this.isochronic.setVolume(this.volume)
     this.startTickLoop()
   }
@@ -153,6 +169,7 @@ export class SessionManager {
   fadeOut(durationSec: number): void {
     this.engine.fadeVolume(0, durationSec)
     this.noise.fadeVolume(0, durationSec)
+    this.ambient.fadeVolume(0, durationSec)
     if (this._isochronicEnabled) this.isochronic.setVolume(0)
   }
 
@@ -162,6 +179,7 @@ export class SessionManager {
     this.engine.stopShared()
     this.noise.stop()
     this.isochronic.stop()
+    this.ambient.stop()
     if (this.ctx && this.ctx.state !== 'closed') {
       this.ctx.close()
     }
@@ -173,6 +191,8 @@ export class SessionManager {
     this.preset = null
     this.callback = null
     this._isochronicEnabled = false
+    this.ambientSound = 'none'
+    this.ambientVolume = 0
   }
 
   setVolume(v: number): void {
@@ -199,6 +219,30 @@ export class SessionManager {
       )
     } else {
       this.isochronic.stop()
+    }
+  }
+
+  setAmbientVolume(v: number): void {
+    this.ambientVolume = v
+    if (this.pausedAt > 0) return
+    this.ambient.setVolume(v)
+  }
+
+  async setAmbientSound(sound: AmbientSoundType): Promise<void> {
+    this.ambientSound = sound
+    if (!this.ctx || this.pausedAt > 0) return
+
+    if (sound === 'none') {
+      this.ambient.fadeVolume(0, 1)
+      setTimeout(() => this.ambient.stop(), 1100)
+      return
+    }
+
+    if (this.ambient.isRunning) {
+      await this.ambient.switchSound(sound, this.ambientVolume)
+    } else {
+      await this.ambient.start(this.ctx, this.ctx.destination, sound, 0)
+      this.ambient.fadeVolume(this.ambientVolume, 1)
     }
   }
 
@@ -294,6 +338,7 @@ export class SessionManager {
     if (this.preset && !this.preset.hasReturnPhase) {
       this.engine.fadeVolume(0, 5)
       this.noise.fadeVolume(0, 5)
+      this.ambient.fadeVolume(0, 5)
     }
 
     this.callback?.({

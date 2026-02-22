@@ -77,6 +77,8 @@ function App() {
           isochronicEnabled: options.isochronicEnabled,
           breathingGuideEnabled: options.breathingGuideEnabled,
           volume: options.volume,
+          ambientSound: options.ambientSound,
+          ambientVolume: options.ambientVolume,
         })
         await wakeLock.request()
         setView('session')
@@ -184,6 +186,8 @@ function App() {
         onVolumeChange={audio.setVolume}
         onToggleIsochronic={audio.toggleIsochronic}
         onToggleBreathingGuide={audio.toggleBreathingGuide}
+        onAmbientVolumeChange={audio.setAmbientVolume}
+        onAmbientSoundChange={audio.setAmbientSound}
         onComplete={handleSessionComplete}
         onMoodSelect={handleMoodSelect}
         stats={history.stats}

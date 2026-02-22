@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { AudioEngineState } from '../hooks/useAudioEngine'
-import type { UserStats, MoodRating } from '../types'
+import type { UserStats, MoodRating, AmbientSoundType } from '../types'
 import { phaseLabels, getMainPhaseLabel } from '../presets'
 import { Visualizer } from './Visualizer'
 import { BreathingGuide } from './BreathingGuide'
 import { CompletionScreen } from './CompletionScreen'
+import { ambientSounds } from '../audio/ambientSounds'
 
 interface Props {
   state: AudioEngineState
@@ -14,6 +15,8 @@ interface Props {
   onVolumeChange: (v: number) => void
   onToggleIsochronic: () => void
   onToggleBreathingGuide: () => void
+  onAmbientVolumeChange: (v: number) => void
+  onAmbientSoundChange: (sound: AmbientSoundType) => void
   onComplete: () => void
   onMoodSelect: (mood: MoodRating) => void
   stats: UserStats
@@ -43,6 +46,8 @@ export function Player({
   onVolumeChange,
   onToggleIsochronic,
   onToggleBreathingGuide,
+  onAmbientVolumeChange,
+  onAmbientSoundChange,
   onComplete,
   onMoodSelect,
   stats,
@@ -310,6 +315,49 @@ export function Player({
                   </button>
                 </div>
               )}
+
+              {/* Ambient sound */}
+              <div className="border-t border-white/5 mt-3 pt-3">
+                <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Ambient</p>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  <button
+                    onClick={() => onAmbientSoundChange('none')}
+                    className={`px-2 py-1 rounded-full text-[10px] font-medium transition-all ${
+                      state.ambientSound === 'none'
+                        ? 'bg-white/15 text-white'
+                        : 'bg-white/5 text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    Off
+                  </button>
+                  {ambientSounds.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => onAmbientSoundChange(s.id)}
+                      className={`px-2 py-1 rounded-full text-[10px] font-medium transition-all ${
+                        state.ambientSound === s.id
+                          ? 'bg-white/15 text-white'
+                          : 'bg-white/5 text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      {s.icon} {s.label}
+                    </button>
+                  ))}
+                </div>
+                {state.ambientSound !== 'none' && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={5}
+                      max={100}
+                      value={Math.round(state.ambientVolume * 100)}
+                      onChange={(e) => onAmbientVolumeChange(Number(e.target.value) / 100)}
+                      className="flex-1"
+                    />
+                    <span className="text-[10px] text-slate-500 w-7 text-right">{Math.round(state.ambientVolume * 100)}%</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

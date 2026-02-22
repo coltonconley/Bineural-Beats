@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { SessionPreset, SessionOptions } from '../types'
+import type { SessionPreset, SessionOptions, AmbientSoundType } from '../types'
 import { bandInfo } from '../presets'
 import { FrequencySparkline } from './FrequencySparkline'
 import { usePreviewTone } from '../hooks/usePreviewTone'
+import { ambientSounds } from '../audio/ambientSounds'
 
 interface Props {
   preset: SessionPreset
@@ -20,6 +21,8 @@ export function SessionSetup({ preset, onClose, onBegin }: Props) {
   const [isochronicEnabled, setIsochronicEnabled] = useState(false)
   const [breathingGuideEnabled, setBreathingGuideEnabled] = useState(false)
   const [isPreviewing, setIsPreviewing] = useState(false)
+  const [ambientSound, setAmbientSound] = useState<AmbientSoundType>(preset.ambientSound)
+  const [ambientVolume, setAmbientVolume] = useState(Math.round(preset.ambientVolume * 100))
   const band = bandInfo[preset.targetBand]
   const preview = usePreviewTone()
 
@@ -29,6 +32,8 @@ export function SessionSetup({ preset, onClose, onBegin }: Props) {
       isochronicEnabled,
       breathingGuideEnabled,
       volume: volume / 100,
+      ambientSound,
+      ambientVolume: ambientVolume / 100,
     })
   }
 
@@ -147,6 +152,53 @@ export function SessionSetup({ preset, onClose, onBegin }: Props) {
               className="w-full"
             />
             <p className="text-[10px] text-slate-600 mt-1">Set to barely comfortable</p>
+          </div>
+
+          {/* Ambient sound */}
+          <div className="mb-5">
+            <p className="text-xs text-slate-500 mb-2">Ambient Sound</p>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+              <button
+                onClick={() => setAmbientSound('none')}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  ambientSound === 'none'
+                    ? 'bg-white/15 text-white border border-white/20'
+                    : 'glass text-slate-400 border border-white/5 hover:border-white/15'
+                }`}
+              >
+                None
+              </button>
+              {ambientSounds.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setAmbientSound(s.id)}
+                  className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                    ambientSound === s.id
+                      ? 'bg-white/15 text-white border border-white/20'
+                      : 'glass text-slate-400 border border-white/5 hover:border-white/15'
+                  }`}
+                >
+                  <span>{s.icon}</span>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {ambientSound !== 'none' && (
+              <div className="mt-3">
+                <div className="flex justify-between text-xs text-slate-500 mb-2">
+                  <span>Ambient Volume</span>
+                  <span>{ambientVolume}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={5}
+                  max={100}
+                  value={ambientVolume}
+                  onChange={(e) => setAmbientVolume(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+            )}
           </div>
 
           {/* Toggles */}

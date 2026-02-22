@@ -23,6 +23,8 @@ export const presets: SessionPreset[] = [
     isochronicAvailable: true,
     icon: '🌊',
     color: '#3b82f6',
+    ambientSound: 'rain',
+    ambientVolume: 0.4,
   },
   {
     id: 'deep-relax',
@@ -46,6 +48,8 @@ export const presets: SessionPreset[] = [
     isochronicAvailable: true,
     icon: '🍃',
     color: '#22c55e',
+    ambientSound: 'forest',
+    ambientVolume: 0.4,
   },
 
   // ── Meditation ──────────────────────────────────────────────
@@ -71,6 +75,8 @@ export const presets: SessionPreset[] = [
     isochronicAvailable: false,
     icon: '🧘',
     color: '#a855f7',
+    ambientSound: 'stream',
+    ambientVolume: 0.3,
   },
   {
     id: 'creative-theta',
@@ -94,6 +100,8 @@ export const presets: SessionPreset[] = [
     isochronicAvailable: false,
     icon: '💡',
     color: '#f59e0b',
+    ambientSound: 'forest',
+    ambientVolume: 0.35,
   },
 
   // ── Focus ───────────────────────────────────────────────────
@@ -119,6 +127,8 @@ export const presets: SessionPreset[] = [
     isochronicAvailable: true,
     icon: '🎯',
     color: '#ef4444',
+    ambientSound: 'rain',
+    ambientVolume: 0.25,
   },
   {
     id: 'gamma-boost',
@@ -142,6 +152,8 @@ export const presets: SessionPreset[] = [
     isochronicAvailable: true,
     icon: '⚡',
     color: '#f97316',
+    ambientSound: 'none',
+    ambientVolume: 0,
   },
 
   // ── Sleep ───────────────────────────────────────────────────
@@ -167,6 +179,8 @@ export const presets: SessionPreset[] = [
     isochronicAvailable: false,
     icon: '🌙',
     color: '#6366f1',
+    ambientSound: 'rain',
+    ambientVolume: 0.5,
   },
   {
     id: 'power-nap',
@@ -192,6 +206,8 @@ export const presets: SessionPreset[] = [
     isochronicAvailable: false,
     icon: '💤',
     color: '#8b5cf6',
+    ambientSound: 'ocean',
+    ambientVolume: 0.4,
   },
 
   // ── Advanced ────────────────────────────────────────────────
@@ -221,6 +237,8 @@ export const presets: SessionPreset[] = [
     isochronicAvailable: false,
     icon: '🔮',
     color: '#ec4899',
+    ambientSound: 'stream',
+    ambientVolume: 0.35,
   },
   {
     id: 'harmonic-box',
@@ -247,6 +265,8 @@ export const presets: SessionPreset[] = [
     isochronicAvailable: false,
     icon: '🔷',
     color: '#14b8a6',
+    ambientSound: 'forest',
+    ambientVolume: 0.3,
   },
 ]
 
