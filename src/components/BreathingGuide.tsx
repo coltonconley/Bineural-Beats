@@ -10,6 +10,10 @@ export function BreathingGuide({ size, hapticEnabled = false }: Props) {
   const [phase, setPhase] = useState<'in' | 'out'>('out')
   const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const haptics = useHaptics()
+  const hapticEnabledRef = useRef(hapticEnabled)
+  const hapticsRef = useRef(haptics)
+  hapticEnabledRef.current = hapticEnabled
+  hapticsRef.current = haptics
 
   useEffect(() => {
     const clearAll = () => {
@@ -19,13 +23,13 @@ export function BreathingGuide({ size, hapticEnabled = false }: Props) {
 
     const cycle = () => {
       setPhase('in')
-      if (hapticEnabled && haptics.isSupported) {
-        haptics.pulse(50)
+      if (hapticEnabledRef.current && hapticsRef.current.isSupported) {
+        hapticsRef.current.pulse(50)
       }
       const t1 = setTimeout(() => {
         setPhase('out')
-        if (hapticEnabled && haptics.isSupported) {
-          haptics.pattern([30, 50, 30])
+        if (hapticEnabledRef.current && hapticsRef.current.isSupported) {
+          hapticsRef.current.pattern([30, 50, 30])
         }
         const t2 = setTimeout(cycle, 5500)
         timeoutsRef.current.push(t2)
@@ -35,7 +39,7 @@ export function BreathingGuide({ size, hapticEnabled = false }: Props) {
 
     cycle()
     return clearAll
-  }, [hapticEnabled, haptics])
+  }, [])
 
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
